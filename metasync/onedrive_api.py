@@ -357,12 +357,14 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
       parent = self._path_to_metadata(parent_folder, isfolder=True)
 
     parent_id = parent['id']
-    url = OneDriveAPI.BASE_URL + '/%s' % parent_id
+    url = OneDriveAPI.BASE_URL + '/me/drive/items' '/%s' % parent_id + '/children'
+    print('url: ' + url)
     headers = {
       "Authorization": "Bearer " + self.token.access_token,
       "Content-Type": "application/json"
     }
-    data = '{"name": "%s"}' % name
+    data = '{"name": "%s", "folder": { } }' % name
+    print('data: ', data)
     resp = self._request('POST', url, headers=headers, data=data)
     self._cache_metadata(path, resp)
 
@@ -443,7 +445,7 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
 
     metacache = OneDriveMetaData.getInstance()
     if not '/' in metacache._foldermap:
-      url = OneDriveAPI.BASE_URL + '/me/drive'
+      url = OneDriveAPI.BASE_URL + '/me/drive/root'
       resp = self._request('GET', url)
       metacache._foldermap['/'] = resp
 
