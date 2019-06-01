@@ -15,8 +15,10 @@ import util
 from error import *
 from base import *
 
-CLIENT_ID = '000000004411503A'
-CLINET_SECRET = 'CJxXEWQfC07ml95277GnoDrr8M3Ksbc0'
+CLIENT_ID = '35a15e1f-faa3-4a4f-9bf5-09b86d4d1485'
+# CLIENT_ID = '000000004411503A'
+#CLIENT_SECRET = 'CJxXEWQfC07ml95277GnoDrr8M3Ksbc0'
+CLIENT_SECRET = 'L4a-MAINia32TRL+Q6zTJaf+TVoanSs]'
 
 EXCEPTION_MAP = {
   httplib.UNAUTHORIZED: Unauthorized,
@@ -29,9 +31,12 @@ AUTH_FILE = os.path.join(AUTH_DIR, 'onedrive.auth')
 
 class OAuth2(object):
 
-  AUTH_RUL = 'https://login.live.com/oauth20_authorize.srf'
-  TOKEN_URL = 'https://login.live.com/oauth20_token.srf'
-  REDIRECT_URI = 'https://login.live.com/oauth20_desktop.srf'
+  AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
+  #AUTH_RUL = 'https://login.live.com/oauth20_authorize.srf'
+  TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+  #TOKEN_URL = 'https://login.live.com/oauth20_token.srf'
+  #REDIRECT_URI = 'https://login.live.com/oauth20_desktop.srf'
+  REDIRECT_URI = 'https://login.microsoftonline.com/common/oauth2/nativeclient'
 
   @staticmethod
   def request_token():
@@ -64,18 +69,19 @@ class OAuth2(object):
       'response_type': 'code',
       'client_id': CLIENT_ID,
       'redirect_uri': OAuth2.REDIRECT_URI,
-      'scope': 'wl.skydrive_update wl.offline_access'
+      'scope': 'files.readwrite offline_access'
     }
-    authorize_url = OAuth2.AUTH_RUL + '?' + urllib.urlencode(params)
+    authorize_url = OAuth2.AUTH_URL + '?' + urllib.urlencode(params)
 
     opts = Options()
     # Set chrome binary if needed
     #opts.binary_location = '/usr/bin/chromium-browser'
     browser = webdriver.Chrome(chrome_options=opts)
     browser.get(authorize_url)
+    lasturl = OAuth2.TOKEN_URL + '?code='
     try:
       wait = WebDriverWait(browser, 60)
-      while not wait.until(EC.url_contains('login.live.com/oauth20_desktop.srf?code=')):
+      while not wait.until(EC.url_contains('https://login.microsoftonline.com/common/oauth2/nativeclient?code=')):
           continue
     except:
       print(browser.title)
@@ -112,8 +118,9 @@ class OAuth2(object):
     args = {
       'grant_type': grant_type,
       'client_id': CLIENT_ID,
-      'client_secret': CLINET_SECRET,
-      'redirect_uri': OAuth2.REDIRECT_URI
+      'client_secret': CLIENT_SECRET,
+      'redirect_uri': OAuth2.REDIRECT_URI,
+      'scope': 'files.readwrite offline_access'
       }
     args.update(kwargs)
     params = urllib.urlencode(args)
@@ -219,7 +226,8 @@ class OneDriveMetaData:
 
 class OneDriveAPI(StorageAPI, AppendOnlyLog):
   "onedrive@auth : onedrive account with auth info"
-  BASE_URL = 'https://apis.live.net/v5.0'
+  #BASE_URL = 'https://apis.live.net/v5.0'
+  BASE_URL = 'https://graph.microsoft.com/v1.0'
 
   def __init__(self, token=None):
     if token:
@@ -268,13 +276,11 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
 
   def _request(self, method, url, params=None, data=None, headers=None, raw=False, try_refresh=True, **kwargs):
 
-    if not headers:
-      if params:
-        params['access_token'] = self.token.access_token
-      else:
-        params = {'access_token': self.token.access_token}
-
-    response = requests.request(method, url, params=params, data=data, headers=headers, **kwargs)
+    myheaders = {}
+    myheaders['Authorization'] = 'Bearer {0}'.format(self.token.access_token)
+    myheaders['Accept'] = 'application/json'
+    myheaders['Content-Type'] = 'application/json'
+    response = requests.request(method, url, params=params, data=data, headers=myheaders, **kwargs)
 
     if response.status_code == httplib.UNAUTHORIZED and try_refresh:
       self.token.refresh()
@@ -437,7 +443,7 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
 
     metacache = OneDriveMetaData.getInstance()
     if not '/' in metacache._foldermap:
-      url = OneDriveAPI.BASE_URL + '/me/skydrive'
+      url = OneDriveAPI.BASE_URL + '/me/drive'
       resp = self._request('GET', url)
       metacache._foldermap['/'] = resp
 
