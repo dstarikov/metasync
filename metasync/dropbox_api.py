@@ -18,7 +18,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
-import tempfile
+from selenium.webdriver.chrome.options import Options
 
 APP_KEY = 'tfz7q0gh7i2zhdo'
 APP_SECRET = 'l7suwn3xvynv7wh'
@@ -316,19 +316,13 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
 
   def share(self, path, target_email):
     url = "https://www.dropbox.com/"
-    print 'Get access token from Dropbox'
-    print 'Open auth url:', url
-    browser = webdriver.PhantomJS(service_log_path=os.path.join(tempfile.gettempdir(), 'ghostdriver.log'), service_args=['--ignore-ssl-errors=true', '--ssl-protocol=tlsv1'])
+    opts = Options()
+    # Set chrome binary if needed
+    #opts.binary_location = '/usr/bin/chromium-browser'
+    browser = webdriver.Chrome(chrome_options=opts)
     browser.get(url)
     try:
-      wait = WebDriverWait(browser, 30)
-      btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@id='sign-in']/a")))
-      btn.click()
-      email = wait.until(EC.element_to_be_clickable((By.XPATH, "//input[@id='login_email']")))
-      email.send_keys(raw_input("Enter your Dropbox email:"))
-      pwd = browser.find_element_by_xpath("//input[@id='login_password']") 
-      pwd.send_keys(getpass.getpass("Enter your Dropbox password:"))
-      pwd.send_keys(Keys.RETURN)
+      wait = WebDriverWait(browser, 60)
       target_folder = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[text()='%s']" % path)))
       target_folder.click()
       wait.until(EC.title_contains("%s" % path))

@@ -3,8 +3,6 @@
 import os
 import json
 import time
-import tempfile
-
 import webbrowser
 import httplib, urllib, urlparse
 
@@ -57,6 +55,7 @@ class OAuth2(object):
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.chrome.options import Options
 
     params = {
       'response_type': 'code',
@@ -66,17 +65,14 @@ class OAuth2(object):
     }
     url = OAuth2.AUTH_URL + '?' + urllib.urlencode(params)
     #print 'Open auth url:', url
-    browser = webdriver.PhantomJS(service_log_path=os.path.join(tempfile.gettempdir(), 'ghostdriver.log'), service_args=['--ignore-ssl-errors=true', '--ssl-protocol=tlsv1'])
+
+    opts = Options()
+    # Set chrome binary if needed
+    #opts.binary_location = '/usr/bin/chromium-browser'
+    browser = webdriver.Chrome(chrome_options=opts)
     browser.get(url)
     try:
-      wait = WebDriverWait(browser, 30)
-      username = wait.until(EC.presence_of_element_located((By.NAME, "userName")))
-      username.send_keys(raw_input("Enter your baidu userid:"))
-      pwd = browser.find_element_by_name("password")
-      pwd.send_keys(getpass.getpass("Enter your baidu password:"))
-      btn = browser.find_element_by_id("TANGRAM__3__submit")
-      btn.click()
-      wait = WebDriverWait(browser, 30)
+      wait = WebDriverWait(browser, 60)
       verify = wait.until(EC.presence_of_element_located((By.ID, "Verifier")))
       code = verify.get_attribute('value')
       if not code:

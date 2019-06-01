@@ -58,6 +58,8 @@ class OAuth2(object):
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.chrome.options import Options
+
     params = {
       'response_type': 'code',
       'client_id': CLIENT_ID,
@@ -65,44 +67,23 @@ class OAuth2(object):
       'scope': 'wl.skydrive_update wl.offline_access'
     }
     authorize_url = OAuth2.AUTH_RUL + '?' + urllib.urlencode(params)
-    # print 'Open auth url:', authorize_url
-    import tempfile
-    browser = webdriver.PhantomJS(service_log_path=os.path.join(tempfile.gettempdir(), 'ghostdriver.log'), service_args=['--ignore-ssl-errors=true', '--ssl-protocol=tlsv1'])
+
+    opts = Options()
+    # Set chrome binary if needed
+    #opts.binary_location = '/usr/bin/chromium-browser'
+    browser = webdriver.Chrome(chrome_options=opts)
     browser.get(authorize_url)
     try:
-      wait = WebDriverWait(browser, 30)
-      email = wait.until(EC.element_to_be_clickable((By.XPATH, "//input[@name='login']")))
+      wait = WebDriverWait(browser, 60)
+      while not wait.until(EC.url_contains('login.live.com/oauth20_desktop.srf?code=')):
+          continue
     except:
       print(browser.title)
-      print(browser.page_source)
-      browser.quit()
-      raise Exception("timeout for authorization")
-    email.send_keys(raw_input("Enter your OneDrive account:"))
-    pwd = browser.find_element_by_xpath("//input[@name='passwd']") 
-    pwd.send_keys(getpass.getpass("Enter your password:"))
-    pwd.send_keys(Keys.RETURN)
-
-    try:
-      wait = WebDriverWait(browser, 30)
-      btn = wait.until(EC.element_to_be_clickable((By.ID, "idBtn_Accept")))
-    except:
-      print(browser.title)
-      browser.quit()
-      raise Exception("timeout for authorization")
-    btn.click()
-
-    try:
-      wait = WebDriverWait(browser, 30)
-      wait.until(EC.title_is(""))
-    except:
-      print(browser.title)
-      print(browser.current_url)
       print(browser.page_source)
       browser.quit()
       raise Exception("timeout for authorization")
 
     url = browser.current_url
-    #url = raw_input("Copy the url here: ").strip()
     resp = urlparse.urlparse(url)
 
     code = None
@@ -113,7 +94,7 @@ class OAuth2(object):
         code = data[1]
 
     if not code:
-      raise Exception('User denied authroization')
+      raise Exception('User denied authorization')
 
     return code
 
