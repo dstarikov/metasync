@@ -69,7 +69,7 @@ class OAuth2(object):
       'response_type': 'code',
       'client_id': CLIENT_ID,
       'redirect_uri': OAuth2.REDIRECT_URI,
-      'scope': 'files.readwrite offline_access'
+      'scope': 'files.readwrite.all offline_access'
     }
     authorize_url = OAuth2.AUTH_URL + '?' + urllib.urlencode(params)
 
@@ -120,7 +120,7 @@ class OAuth2(object):
       'client_id': CLIENT_ID,
       'client_secret': CLIENT_SECRET,
       'redirect_uri': OAuth2.REDIRECT_URI,
-      'scope': 'files.readwrite offline_access'
+      'scope': 'files.readwrite.all offline_access'
       }
     args.update(kwargs)
     params = urllib.urlencode(args)
@@ -188,7 +188,7 @@ class OneDriveMetaData:
     self.lock = Lock()
 
   def _is_folder(self, metadata):
-    return (metadata['type'] == 'folder')
+    return ('folder' in metadata)
 
   def path_to_metadata(self, path, isfolder=False):
     if path == '/':
@@ -293,9 +293,9 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
       return response.json()
 
   def _listdir(self, folder_id):
-    url = OneDriveAPI.BASE_URL + '/%s/files' % folder_id
+    url = OneDriveAPI.BASE_URL + '/me/drive/items/%s/children' % folder_id
     resp = self._request('GET', url)
-    return resp['data']
+    return resp['value']
 
   def listdir(self, path):
     """
@@ -388,10 +388,10 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
       parent = self._path_to_metadata(parent_folder, isfolder=True)
 
     parent_id = parent['id']
-    url = OneDriveAPI.BASE_URL + '/%s/files/%s' % (parent_id, name)
+    url = OneDriveAPI.BASE_URL + '/me/drive/items/%s:/%s:/content' % (parent_id, name)
     strobj = StringIO(content)
-    params = { 'overwrite': 'false' }
-    metadata = self._request('PUT', url, params=params, data=strobj)
+    #params = { 'overwrite': 'false' }
+    metadata = self._request('PUT', url, data=strobj)
 
     metadata[u'type'] = u'file'
     self._cache_metadata(path, metadata)
@@ -422,7 +422,7 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
     metadata = self._path_to_metadata(path)
     file_id = metadata['id']
 
-    url = OneDriveAPI.BASE_URL + '/%s' % file_id
+    url = OneDriveAPI.BASE_URL + '/drive/items/%s' % file_id
     self._request('DELETE', url, raw=True)
 
   def rmdir(self, path):
@@ -430,7 +430,7 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
     metadata = self._path_to_metadata(path, isfolder=True)
     file_id = metadata['id']
 
-    url = OneDriveAPI.BASE_URL + '/%s' % file_id
+    url = OneDriveAPI.BASE_URL + '/drive/items/%s' % file_id
     self._request('DELETE', url, raw=True)
 
   def metadata(self, path):
@@ -479,13 +479,17 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
     metadata = self._path_to_metadata(path)
     file_id = metadata['id']
 
-    url = OneDriveAPI.BASE_URL + '/%s/comments' % file_id
+    url = OneDriveAPI.BASE_URL + '/me/drive/items/%s/onedrive.checkout' % file_id
     headers = {
       "Authorization": "Bearer " + self.token.access_token,
       "Content-Type": "application/json"
     }
-    data = '{"message": "%s"}' % comment
+    resp = self._request('POST', url, headers=headers) #data=data)
+
+    url = OneDriveAPI.BASE_URL + '/me/drive/items/%s/onedrive.checkin' % file_id
+    data = '{"comment": "%s"}' % comment
     resp = self._request('POST', url, headers=headers, data=data)
+
 
   def get_comments(self, path, length=5, offset=0):
     beg = time.time()
@@ -497,11 +501,11 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
       'limit': length,
       'offset': offset
     }
-    url = OneDriveAPI.BASE_URL + '/%s/comments' % (file_id)
+    url = OneDriveAPI.BASE_URL + '/drive/items/%s/version' % (file_id)
     resp = self._request('GET', url, params)
     end = time.time()
     dbg.paxos_time("get_comments %s", end-beg)
-    return resp['data']
+    return resp['value']
 
   def init_log(self, path):
     path = '/Public' + util.format_path(path)
