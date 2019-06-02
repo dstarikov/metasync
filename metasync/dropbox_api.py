@@ -4,11 +4,15 @@ import os
 
 from cStringIO import StringIO
 
-from dropbox.rest import ErrorResponse
-from dropbox.client import DropboxClient, DropboxOAuth2FlowNoRedirect
+#from dropbox.rest import ErrorResponse
+#from dropbox.client import DropboxClient, DropboxOAuth2FlowNoRedirect
 
 import dbg
 import util
+import dropbox
+from dropbox import DropboxOAuth2FlowNoRedirect
+from dropbox.files import WriteMode, WriteError
+from dropbox.exceptions import ApiError
 from base import *
 from error import *
 
@@ -20,8 +24,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 
-APP_KEY = 'tfz7q0gh7i2zhdo'
-APP_SECRET = 'l7suwn3xvynv7wh'
+APP_KEY = '0axm57p90xpryu1'
+APP_SECRET = 'vlijovbe2gs5vaq'
 
 # NOTE.
 #  with 'auth' params, multiple dropbox instances can be used
@@ -40,7 +44,7 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
     except IOError:
       ACCESS_TOKEN, USER_ID = self._authorize()
 
-    self.client = DropboxClient(ACCESS_TOKEN)
+    self.client = dropbox.Dropbox(ACCESS_TOKEN)
 
   def sid(self):
     return util.md5("dropbox") % 10000
@@ -62,25 +66,31 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
     print("")
     code = raw_input("Input the code you got: ").strip()
     #code = #raw_input("Enter the authorization code here: ").strip()
-    access_token, user_id = flow.finish(code)
-    with open(self.auth_file, 'w') as file:
-      file.write(access_token + "\n")
-      file.write(user_id + "\n")
-
-    dbg.info('Authentication successful')
-
-    return (access_token, user_id)
+    try:
+      oauth_result = flow.finish(code)
+      with open(self.auth_file, 'w') as file:
+        file.write(oauth_result.access_token + "\n")
+        file.write(oauth_result.user_id + "\n")
+      dbg.info('Authentication successful')
+      return (oauth_result.access_token, oauth_result.user_id)
+    except Exception, e:
+        print('Error: %s' % (e,))
+        return
 
   # return: list of file paths
   def listdir(self, path):
-    dic = self.client.metadata(path)
+    if not path.startswith('/'):
+      path = '/' + path
+    dic = self.client.files_get_metadata(path)
     lst = map(lambda x:x["path"], dic["contents"])
     lst = map(lambda x:x.split("/")[-1], lst)
     return lst
 
   def exists(self, path):
+    if not path.startswith('/'):
+      path = '/' + path
     try:
-      dic = self.client.metadata(path)
+      dic = self.client.files_get_metadata(path)
       if(dic.has_key("is_deleted") and dic["is_deleted"]): return False
       return True
     except:
@@ -96,19 +106,22 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
       content: string
     """
 
-    conn = self.client.get_file(path)
+    if not path.startswith('/'):
+      path = '/' + path
+    metadata, conn = self.client.files_download(path)
     content = conn.read()
     conn.close()
     return content
 
   def get_file_rev(self, path, rev):
     # get file of a previous version with rev hash_id
+    if not path.startswith('/'):
+      path = '/' + path
     content = None
     try:
-      conn = self.client.get_file(path, rev=rev)
-      content = conn.read()
-      conn.close()
-    except ErrorResponse as detail:
+      metadata, f = self.client.files_download(path, rev=rev)
+      content = f.content
+    except ApiError as detail:
       #print "[get_file_rev] File doesn't exist", detail
       return None
     return content
@@ -122,27 +135,32 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
 
     Returns: None
     """
-    from dropbox.rest import ErrorResponse
+    if not path.startswith('/'):
+      path = '/' + path
     strobj = StringIO(content)
 
     try:
-      metadata = self.client.put_file(path, strobj, overwrite=False, autorename=False)
-    except ErrorResponse as e:
-      if e.status == 409:
+      metadata = self.client.files_upload(strobj, path, mode=WriteMode('add'), autorename=False, strict_conflict=True)
+    except ApiError as e:
+      if e.error.is_path() and e.error.get_path().reason == WriteError.conflict:
         raise ItemAlreadyExists(e.status, e.reason)
       else:
         raise APIError(e.status, e.reason)
     return True
 
   def putdir(self, path):
-    self.client.file_create_folder(path)
+    if not path.startswith('/'):
+      path = '/' + path
+    self.client.files_create_folder(path, autorename=False)
 
   def update(self, path, content):
     """Update the file
     Args and returns same as put
     """
+    if not path.startswith('/'):
+      path = '/' + path
     strobj = StringIO(content)
-    metadata = self.client.put_file(path, strobj, overwrite=True)
+    metadata = self.client.files_upload(strobj, path, mode=dropbox.files.WriteMode('overwrite'))
     return True
 
   def rm(self, path):
@@ -151,119 +169,132 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
     Args:
       path: string
     """
-    self.client.file_delete(path)
+    if not path.startswith('/'):
+      path = '/' + path
+    self.client.files_delete(path)
 
   def rmdir(self, path):
-    self.client.file_delete(path)
+    if not path.startswith('/'):
+      path = '/' + path
+    self.client.files_delete(path)
 
   def metadata(self, path):
     # only for file, not dir
-    _md = self.client.metadata(path)
+    if not path.startswith('/'):
+      path = '/' + path
+    _md = self.client.files_get_metadata(path)
     md = {}
-    md['size'] = _md['bytes']
-    md['mtime'] = util.convert_time(_md['modified'])
+    md['size'] = _md.size
+    md['mtime'] = util.convert_time(_md.client_modified)
     return md
 
-  def delta(self, path=None, cursor=None):
-    resp = self.client.delta(cursor=cursor, path_prefix=path)
-    cursor = resp['cursor']
-    changes = []
+  # def delta(self, path=None, cursor=None):
+  #   resp = self.client.delta(cursor=cursor, path_prefix=path)
+  #   cursor = resp['cursor']
+  #   changes = []
 
-    for entry in resp['entries']:
-      event = {}
-      if entry[1]:
-        # we don't care about delete event
-        event['path'] = entry[0]
-        if entry[1]['is_dir']:
-          event['type'] = 'folder'
-        else:
-          event['type'] = 'file'
-        changes.append(event)
+  #   for entry in resp['entries']:
+  #     event = {}
+  #     if entry[1]:
+  #       # we don't care about delete event
+  #       event['path'] = entry[0]
+  #       if entry[1]['is_dir']:
+  #         event['type'] = 'folder'
+  #       else:
+  #         event['type'] = 'file'
+  #       changes.append(event)
 
-    return cursor, changes
+  #   return cursor, changes
 
-  def poll(self, path=None, cursor=None, timeout=30):
-    # timeout max 480
-    import requests
-    import time
+  # def poll(self, path=None, cursor=None, timeout=30):
+  #   # timeout max 480
+  #   import requests
+  #   import time
 
-    from error import PollError
+  #   from error import PollError
 
-    beg_time = time.time()
-    end_time = beg_time + timeout
-    curr_time = beg_time
+  #   beg_time = time.time()
+  #   end_time = beg_time + timeout
+  #   curr_time = beg_time
 
-    url = 'https://api-notify.dropbox.com/1/longpoll_delta'
-    params = {}
-    changes = []
-    if path:
-      path = util.format_path(path)
+  #   url = 'https://api-notify.dropbox.com/1/longpoll_delta'
+  #   params = {}
+  #   changes = []
+  #   if path:
+  #     path = util.format_path(path)
 
-    if not cursor:
-      cursor, _ = self.delta(path)
-      curr_time = time.time()
+  #   if not cursor:
+  #     cursor, _ = self.delta(path)
+  #     curr_time = time.time()
 
-    while True:
-      params['cursor'] = cursor
-      params['timeout'] = max(30, int(end_time - curr_time)) # minimum 30 second
+  #   while True:
+  #     params['cursor'] = cursor
+  #     params['timeout'] = max(30, int(end_time - curr_time)) # minimum 30 second
 
-      resp = requests.request('GET', url, params=params)
-      obj = resp.json()
-      if 'error' in obj:
-        raise PollError(resp.status_code, resp.text)
+  #     resp = requests.request('GET', url, params=params)
+  #     obj = resp.json()
+  #     if 'error' in obj:
+  #       raise PollError(resp.status_code, resp.text)
 
-      if obj['changes']:
-        cursor, _delta = self.delta(path, cursor)
-        changes.extend(_delta)
+  #     if obj['changes']:
+  #       cursor, _delta = self.delta(path, cursor)
+  #       changes.extend(_delta)
       
-      if changes:
-        break
-      curr_time = time.time()
-      if curr_time > end_time:
-        break
+  #     if changes:
+  #       break
+  #     curr_time = time.time()
+  #     if curr_time > end_time:
+  #       break
 
-    return cursor, changes
+  #   return cursor, changes
 
   def init_log(self, path):
+    if not path.startswith('/'):
+      path = '/' + path
     if not self.exists(path):
       self.put(path, '')
 
   def reset_log(self, path):
+    if not path.startswith('/'):
+      path = '/' + path
     if self.exists(path):
       self.rm(path)
 
   def append(self, path, msg):
+    if not path.startswith('/'):
+      path = '/' + path
     self.update(path, msg)
 
   def get_logs(self, path, last_clock):
 
+    if not path.startswith('/'):
+      path = '/' + path
     length = 5
     # latest revision comes first
-    revisions = self.client.revisions(path, rev_limit=length)
-    if not revisions:
+    revisions = self.client.files_list_revisions(path, limit=length)
+    if not revisions.entries:
       return [], None
 
     new_logs = []
-    new_clock = revisions[0]['rev']
+    new_clock = revisions.entries[0].rev
     end = False # if reach to end
 
     while True:
-      for metadata in revisions:
-        if last_clock and metadata['rev'] == last_clock:
+      for metadata in revisions.entries:
+        if last_clock and metadata.rev == last_clock:
           end = True
           break
       if end: break
-      if len(revisions) < length: break
+      if len(revisions.entries) < length: break
       # still have logs unread, double the length
       length *= 2
-      revisions = self.client.revisions(path, rev_limit=length)
+      revisions = self.client.files_list_revisions(path, limit=length)
 
     # download the content of unseen rev
-    for metadata in revisions:
-      if last_clock and metadata['rev'] == last_clock:
+    for metadata in revisions.entries:
+      if last_clock and metadata.rev == last_clock:
         break
-      if 'is_deleted' in metadata and metadata['is_deleted']: continue
-      msg = self.get_file_rev(path, metadata['rev'])
+      msg = self.get_file_rev(path, metadata.rev)
       if len(msg) > 0:
         new_logs.insert(0, msg)
 
@@ -273,11 +304,15 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
     return eval(fn[3:])
 
   def init_log2(self, path):
+    if not path.startswith('/'):
+      path = '/' + path
     if not self.exists(path):
       self.putdir(path)
 
   def append2(self, path, msg):
     path = util.format_path(path)
+    if not path.startswith('/'):
+      path = '/' + path
     lst = sorted(self.listdir(path))
     if lst:
       index = self.__msg_index(lst[-1]) + 1
@@ -296,6 +331,8 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
 
   def get_logs2(self, path, last_clock):
     path = util.format_path(path)
+    if not path.startswith('/'):
+      path = '/' + path
     lst = self.listdir(path)
     if not lst:
       return [], None
@@ -315,6 +352,8 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
     return new_logs, new_clock
 
   def share(self, path, target_email):
+    if not path.startswith('/'):
+      path = '/' + path
     url = "https://www.dropbox.com/"
     opts = Options()
     # Set chrome binary if needed
