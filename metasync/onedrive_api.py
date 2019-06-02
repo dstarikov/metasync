@@ -307,6 +307,9 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
     """
     path = util.format_path(path)
     folder = self._path_to_metadata(path, True)
+    if folder == None:
+      return None
+
     folder_id = folder['id']
 
     metalist = self._listdir(folder_id)
@@ -333,7 +336,7 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
     metadata = self._path_to_metadata(path)
     file_id = metadata['id']
 
-    url = OneDriveAPI.BASE_URL + '/%s/content' % file_id
+    url = OneDriveAPI.BASE_URL + '/me/drive/items/%s/content' % file_id
     resp = self._request('GET', url, raw=True, stream=True)
 
     return resp.raw.read()
@@ -399,18 +402,20 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
 
   def update(self, path, content):
     path = util.format_path(path)
-    name = os.path.basename(path)
-    parent_folder = os.path.dirname(path)
+    metadata = self._path_to_metadata(path)
+    # name = os.path.basename(path)
+    # parent_folder = os.path.dirname(path)
 
-    parent = self._path_to_metadata(parent_folder, isfolder=True)
-    if not parent:
-      # if the parent folder doesn't exist, then create one
-      self.putdir(parent_folder)
-      parent = self._path_to_metadata(parent_folder, isfolder=True)
+    # parent = self._path_to_metadata(parent_folder, isfolder=True)
+    # if not parent:
+    #   # if the parent folder doesn't exist, then create one
+    #   self.putdir(parent_folder)
+    #   parent = self._path_to_metadata(parent_folder, isfolder=True)
 
-    parent_id = parent['id']
-    url = OneDriveAPI.BASE_URL + '/%s/files/%s' % (parent_id, name)
+    # parent_id = parent['id']
+    url = OneDriveAPI.BASE_URL + '/me/drive/items/%s/content' % metadata['id']
     strobj = StringIO(content)
+    #params = { 'overwrite': 'true' }
     metadata = self._request('PUT', url, data=strobj)
 
     metadata[u'type'] = u'file'
@@ -422,7 +427,7 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
     metadata = self._path_to_metadata(path)
     file_id = metadata['id']
 
-    url = OneDriveAPI.BASE_URL + '/drive/items/%s' % file_id
+    url = OneDriveAPI.BASE_URL + '/me/drive/items/%s' % file_id
     self._request('DELETE', url, raw=True)
 
   def rmdir(self, path):
@@ -430,7 +435,7 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
     metadata = self._path_to_metadata(path, isfolder=True)
     file_id = metadata['id']
 
-    url = OneDriveAPI.BASE_URL + '/drive/items/%s' % file_id
+    url = OneDriveAPI.BASE_URL + '/me/drive/items/%s' % file_id
     self._request('DELETE', url, raw=True)
 
   def metadata(self, path):
@@ -507,24 +512,26 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
     dbg.paxos_time("get_comments %s", end-beg)
     return resp['value']
 
-  def init_log(self, path):
+  def init_log2(self, path):
     path = '/Public' + util.format_path(path)
     if not self.exists(path):
       self.put(path, '')
 
-  def reset_log(self, path):
+  def reset_log2(self, path):
     path = '/Public' + util.format_path(path)
     if self.exists(path):
       self.rm(path)
 
-  def append(self, path, msg):
+  def append2(self, path, msg):
     beg = time.time()
     path = '/Public' + util.format_path(path)
     self.post_comment(path, msg)
     end = time.time()
     dbg.paxos_time("append %s", end-beg)
 
-  def get_logs(self, path, last_clock):
+
+
+  def get_logs2(self, path, last_clock):
 
     beg = time.time()
 
@@ -533,25 +540,27 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
     offset = 0
 
     # latest comment comes first
-    comments = self.get_comments(path, length, offset)
-    if not comments:
+    #comments = self.get_comments(path, length, offset)
+    revisions = self.get_revisions(path)
+    if not revisions:
       return [], None
     
     new_logs = []
-    new_clock = comments[0]['id']
+    new_clock = revisions[0]['id']
     end = False
 
-    while True:
-      for comment in comments:
-        if last_clock and comment['id'] == last_clock:
-          end = True
-          break
-        new_logs.insert(0, comment['message'])
-      if end: break
-      if len(comments) < length: break
+    # while True:
+    for revision in revisions:
+      if last_clock and revision['id'] == last_clock:
+        break
+      msg = self.get_revision(path, revision['id'])
+      if len(msg) > 0:
+        new_logs.insert(0, msg)
+      # if end: break
+      # if len(revisions) < length: break
       # if haven't reached to end, read next batch
-      offset += length
-      comments = self.get_comments(path, length, offset)
+      # offset += length
+      # comments = self.get_comments(path, length, offset)
 
     end = time.time()
     dbg.paxos_time("get_log %s", end-beg)
@@ -560,15 +569,16 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
   def __msg_index(self, fn):
     return eval(fn[3:])
 
-  def init_log2(self, path):
+  def init_log(self, path):
     if not self.exists(path):
       self.putdir(path)
 
-  def append2(self, path, msg):
+  def append(self, path, msg):
     path = util.format_path(path)
-    lst = sorted(self.listdir(path))
+    lst = self.listdir(path)
     if lst:
-      index = self.__msg_index(lst[-1]) + 1
+      slst = sorted(lst)
+      index = self.__msg_index(slst[-1]) + 1
     else:
       index = 0
     
@@ -582,7 +592,7 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
       else:
         break
 
-  def get_logs2(self, path, last_clock):
+  def get_logs(self, path, last_clock):
     path = util.format_path(path)
     lst = self.listdir(path)
     if not lst:
@@ -601,3 +611,19 @@ class OneDriveAPI(StorageAPI, AppendOnlyLog):
       new_logs.insert(0, msg)
 
     return new_logs, new_clock
+
+  def get_revision(self, path, rev_id):
+    path = '/Public' + util.format_path(path)
+    metadata = self._path_to_metadata(path)
+    file_id = metadata['id']
+    url = OneDriveAPI.BASE_URL + '/me/drive/items/{0}/versions/{1}/content' % (file_id)
+    resp = self._request('GET', url, raw=True, stream=True)
+    return resp.raw.read()
+  
+  def get_revisions(self, path):
+    path = '/Public' + util.format_path(path)
+    metadata = self._path_to_metadata(path)
+    file_id = metadata['id']
+    url = OneDriveAPI.BASE_URL + '/me/drive/items/%s/versions' % (file_id)
+    resp = self._request('GET', url)
+    return resp['value']
