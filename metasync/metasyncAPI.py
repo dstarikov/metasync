@@ -936,6 +936,8 @@ class MetaSync:
                         print(blob.thv)
                         assert False
 
+        # print('head: ', head)
+        # print('master: ', master)
         headblob = self.blobstore.get_blob(head, "D")
         masterblob = self.blobstore.get_blob(master, "D")
         _update(headblob, masterblob, self.path_root)
@@ -956,7 +958,12 @@ class MetaSync:
         head = self.get_head_and_config()
         # XXX: need to check if non-checked in but modified files.
         if (head == prev):
-            self.update_changed(head.split(".")[0], master.split(".")[0])
+            headstr = head.split(".")[0]
+            if headstr == '':
+                return self.restore_from_master()
+
+            masterstr = master.split(".")[0]
+            self.update_changed(headstr, masterstr)
         else:
             ### need to merge
             raise Exception('Merge required')
@@ -965,6 +972,7 @@ class MetaSync:
         self.blobstore.rootblob = None
         dbg.info("update done %s" % time.ctime())
         return True
+
 
     #XXX: Seungyeop is working on it.
     def cmd_clone(self, namespace, backend=None, encrypt_key=None):
@@ -1277,6 +1285,7 @@ class MetaSync:
         prev = self.get_prev_value()
         newvalue = self.get_head_and_config()
         val = self.propose_value(prev, newvalue)
+        # print("val: ", val, "newval: ", newvalue, "prev: ", prev)
         if(val != newvalue):
             dbg.err("You should fetch first")
             return False

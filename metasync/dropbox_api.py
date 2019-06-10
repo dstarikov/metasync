@@ -146,12 +146,12 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
     strobj = StringIO(content)
 
     try:
-      metadata = self.client.files_upload(strobj, path, mode=WriteMode('add'), autorename=False, strict_conflict=True)
+      metadata = self.client.files_upload(strobj, path, mode=WriteMode.overwrite, autorename=False, strict_conflict=True)
     except ApiError as e:
       if e.error.is_path() and e.error.get_path().reason == WriteError.conflict:
-        raise ItemAlreadyExists(e.status, e.reason)
+        raise ItemAlreadyExists(e.error, e.user_message_text)
       else:
-        raise APIError(e.status, e.reason)
+        raise APIError(e.error, e.user_message_text)
     return True
 
   def putdir(self, path):
@@ -166,7 +166,7 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
     if not path.startswith('/'):
       path = '/' + path
     strobj = StringIO(content)
-    metadata = self.client.files_upload(strobj, path, mode=WriteMode('overwrite'))
+    metadata = self.client.files_upload(strobj, path, mode=WriteMode.overwrite)
     return True
 
   def rm(self, path):
