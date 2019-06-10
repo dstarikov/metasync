@@ -1,0 +1,24 @@
+To install:
+	Dependencies:
+	`sudo apt install git python2.7 python-pip python-setuptools libyaml-dev libpython2.7-dev`
+
+	Then install metasync:
+	`sudo python2.7 setup.py install`
+	OR
+	`python2.7 setup.py install --user`
+	
+To create a new metasync repository:
+	`metasync init <repo_name>`
+
+
+To download an existing repository:
+	`metasync clone <repo_name>`
+
+
+To upload files to metasync repository:
+	`metasync checkin <file1> <file2> ... <fileN>`
+	`metasync push`
+
+To download files from metasync repository:
+	`metasync fetch`
+	`metasync update`
