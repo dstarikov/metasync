@@ -82,7 +82,7 @@ def start(metasync, args, opts):
             if(len(files) > 0):
                 leftover = metasync.cmd_checkin(files, upload_only_first=True)
                 metasync.cmd_push()
-                if(len(leftover) > 0):
+                if(isinstance(leftover, dict) and len(leftover) > 0):
                     metasync.bstore_sync_left(leftover)
                 #dbg.info("%s" % files)
 
