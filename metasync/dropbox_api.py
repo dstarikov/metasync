@@ -11,7 +11,7 @@ import dbg
 import util
 import dropbox
 from dropbox import DropboxOAuth2FlowNoRedirect
-from dropbox.files import WriteMode, WriteError
+from dropbox.files import WriteMode, WriteError, DeletedMetadata, FileMetadata
 from dropbox.exceptions import ApiError
 from base import *
 from error import *
@@ -81,18 +81,23 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
   def listdir(self, path):
     if not path.startswith('/'):
       path = '/' + path
-    dic = self.client.files_get_metadata(path)
-    lst = map(lambda x:x["path"], dic["contents"])
-    lst = map(lambda x:x.split("/")[-1], lst)
+    lst = []
+    moreFiles = True
+    while moreFiles:
+      files = self.client.files_list_folder(path)
+      lst.extend(f.name for f in files.entries)
+      moreFiles = files.has_more
     return lst
 
   def exists(self, path):
     if not path.startswith('/'):
       path = '/' + path
     try:
-      dic = self.client.files_get_metadata(path)
-      if(dic.has_key("is_deleted") and dic["is_deleted"]): return False
-      return True
+      res = self.client.files_get_metadata(path, include_deleted=True)
+      if isinstance(res, DeletedMetadata):
+        return False
+      else:
+        return True
     except:
       return False
 
@@ -108,9 +113,10 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
 
     if not path.startswith('/'):
       path = '/' + path
-    metadata, conn = self.client.files_download(path)
-    content = conn.read()
-    conn.close()
+    print('downloading:', path)
+    metadata, f = self.client.files_download(path)
+    content = f.content
+    f.close()
     return content
 
   def get_file_rev(self, path, rev):
@@ -160,7 +166,7 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
     if not path.startswith('/'):
       path = '/' + path
     strobj = StringIO(content)
-    metadata = self.client.files_upload(strobj, path, mode=dropbox.files.WriteMode('overwrite'))
+    metadata = self.client.files_upload(strobj, path, mode=WriteMode('overwrite'))
     return True
 
   def rm(self, path):
@@ -269,6 +275,7 @@ class DropboxAPI(StorageAPI, AppendOnlyLog):
 
     if not path.startswith('/'):
       path = '/' + path
+    print('getting logs for dropbox')
     length = 5
     # latest revision comes first
     revisions = self.client.files_list_revisions(path, limit=length)
