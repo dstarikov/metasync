@@ -134,7 +134,6 @@ public class Watch {
                     // print out event
                     String relative = new File(this.inDir).toURI().relativize(child.toFile().toURI()).getPath();
 
-
                     // if directory is created, and watching recursively, then register it and its sub-directories
                     if (kind == ENTRY_CREATE) {
                         try {
@@ -149,8 +148,8 @@ public class Watch {
                     if (kind == ENTRY_CREATE || kind == ENTRY_MODIFY) {
                         // copy file
                         String outFilePath = this.outDir + "/" + relative;
-                        System.out.println(outFilePath);
-                        System.out.println();
+//                        System.out.println(outFilePath);
+//                        System.out.println();
 
                         if (Files.isDirectory(child)) {
                             // TODO
@@ -184,8 +183,8 @@ public class Watch {
                     }
 
 //                    System.out.format("%s: %s\n", event.kind().name(), child);
-                    System.out.format("%s: %s\n", event.kind().name(), relative);
-                    System.out.println("time = " + new Date().getTime());
+                    System.out.format("%s: %s time: %s\n\n\n", event.kind().name(), relative, new Date().getTime());
+//                    System.out.println("time = " + new Date().getTime());
                 } catch (Exception e) {
 
                 }

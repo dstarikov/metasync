@@ -60,9 +60,7 @@ public class RunTest {
 
         System.out.println("Press enter to continue");
         scanner.nextLine();
-        System.out.println("Test begins in 10 seconds");
         boolean upload = ud.startsWith("U") || ud.startsWith("u");
-        TimeUnit.SECONDS.sleep(10);
         if (upload) {
             // copy files one by one from [plaintext] to [cloud]
            Watch watch = new Watch(plaintext, cloud, true, usernames, publicKeys, privateKey);
