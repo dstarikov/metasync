@@ -50,7 +50,7 @@ import org.cloudguard.crypto.RSAEncryptUtil;
  * Based on example from
  * https://howtodoinjava.com/java8/java-8-watchservice-api-tutorial/
  */
-public class Watch {
+public class Watch implements Runnable {
     public static void main(String[] args) throws IOException, NoSuchAlgorithmException, InvalidKeySpecException {
         Scanner scanner = new Scanner(System.in);
 
@@ -112,6 +112,15 @@ public class Watch {
     private final List<PublicKey> publicKeys;
     private final PrivateKey privateKey;
 
+    @Override
+    public void run() {
+        try {
+            walkAndRegisterDirectories(Paths.get(this.inDir));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     /**
      * Creates a WatchService and registers the given directory
      */
@@ -126,7 +135,7 @@ public class Watch {
         this.publicKeys = publicKeys;
         this.privateKey = privateKey;
 
-        walkAndRegisterDirectories(Paths.get(this.inDir));
+//        walkAndRegisterDirectories(Paths.get(this.inDir));
     }
 
     private void copyFile(File from, File to) throws IOException {
@@ -257,6 +266,7 @@ public class Watch {
             }
         }
     }
+
 
 
 }
