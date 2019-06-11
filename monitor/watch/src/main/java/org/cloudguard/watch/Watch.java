@@ -171,14 +171,14 @@ public class Watch {
                     }
 
                     if (kind == ENTRY_DELETE) {
-                        String outFilePath = this.outDir + "/" + relative;
-                        System.out.println(outFilePath);
-                        System.out.println();
-
-                        if (Files.isDirectory(child))
-                            FileUtils.deleteDirectory(new File(outFilePath));
-                        else
-                            FileUtils.forceDelete(new File(outFilePath));
+//                        String outFilePath = this.outDir + "/" + relative;
+//                        System.out.println(outFilePath);
+//                        System.out.println();
+//
+//                        if (Files.isDirectory(child))
+//                            FileUtils.deleteDirectory(new File(outFilePath));
+//                        else
+//                            FileUtils.forceDelete(new File(outFilePath));
 
                     }
 
