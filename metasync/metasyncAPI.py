@@ -949,10 +949,11 @@ class MetaSync:
             f.write(master)
 
     def cmd_update(self):
-        master = self.get_uptodate_master()
+        master = self.get_uptodate_master(False)
         # already up-to-date
         prev = self.get_prev_value()
         if (master == prev):
+            self.update_head_and_prev(master)
             return True
 
         head = self.get_head_and_config()
@@ -960,6 +961,7 @@ class MetaSync:
         if (head == prev):
             headstr = head.split(".")[0]
             if headstr == '':
+                self.update_head_and_prev(master)
                 return self.restore_from_master()
 
             masterstr = master.split(".")[0]
